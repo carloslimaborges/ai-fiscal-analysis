@@ -1,181 +1,47 @@
-# 📊 Sistema de Análise Fiscal com IA
+# AI Fiscal Analysis System
 
-**Versão 4.0** - Sistema Brasileiro de Análise de Documentos Fiscais
+Natural-language analysis of Brazilian electronic invoices (NF-e CSV exports), built as the capstone project for the I2A2 *Intelligent Agents with Generative AI Networks* course (Canada, 2025).
 
-## 🇧🇷 Sobre o Sistema
+You load a CSV or a ZIP containing the header and item exports, ask a question in Portuguese, and the agent computes the answer with pandas over the full dataset instead of guessing from whatever rows happened to fit in the prompt.
 
-Sistema inteligente para análise automatizada de documentos fiscais brasileiros, desenvolvido com Inteligência Artificial usando LLaMA e interface web moderna com Streamlit.
+## The problem this solves
 
-### ✨ Principais Funcionalidades
+The default way to put an LLM in front of a dataframe is to paste a sample of rows into the prompt. It works in a demo and fails in use: the model answers correctly about the thirty rows it was shown and confidently wrong about the forty thousand it was not. Totals are the first thing to break, and a wrong total in a fiscal report is worse than no report.
 
-- 📄 **Suporte a múltiplos formatos**: CSV individuais ou arquivos ZIP
-- 🤖 **Análise com IA**: Powered by LLaMA via Groq
-- 🇧🇷 **Especializado no Brasil**: CFOPs, NCMs, legislação fiscal brasileira
-- 📊 **Interface intuitiva**: Dashboard web responsivo
-- 💬 **Consultas em linguagem natural**: Pergunte em português
-- 🔍 **Análise detalhada**: Inconsistências, relatórios, insights
+## How it works
 
-## 🚀 Instalação Rápida
+1. **Column normalization.** NF-e exports arrive with inconsistent headers across sources, so column names are lowercased, accent-stripped and separator-normalized before anything else touches them. Monetary and quantity columns are coerced to numeric and dates to datetime with `errors="coerce"`, so bad cells become null instead of killing the load.
+2. **A custom ZeroShot agent instead of a prompt dump.** The agent gets a `PythonAstREPLTool` holding the complete `cabecalho_df` and `itens_df` in its locals. The prompt carries the schema, the record counts, the period covered and a bounded sample, and the instruction is explicit: compute over the full dataframes, cite exact values, explain the method used.
+3. **Streamlit front end** for loading files, browsing an overview and asking questions, with a few aggregate charts (value by issuing state, top products).
 
-### Instalar uv
-Siga as instruções em https://docs.astral.sh/uv/getting-started/installation/
+## Notes from building it
 
-Abra um terminal e execute o seguinte:
+The agent kept returning its reasoning without ever emitting a final answer, which is the classic ZeroShot parsing failure. The fix was in the prompt `SUFFIX`, forcing the `Final Answer:` token into position rather than hoping the model would produce it.
+
+Giving an agent a Python REPL over your dataframes is what makes the answers accurate, and it is also the reason this is a single-user local tool. The model writes code that executes in the process. That is acceptable when you are the only user, running it against your own files, and it is not something to expose to anyone else without a sandbox.
+
+## Stack
+
+Python · pandas · LangChain (`ZeroShotAgent`, `PythonAstREPLTool`) · LLaMA via Groq · Streamlit
+
+## Running it
+
 ```bash
 uv sync
-source .venv/bin/activate
-python
+uv run streamlit run app.py
 ```
 
-Dentro do comando do python que abrir, execute os comandos abaixo (demora um pouco até finalizar e aparecer >>> novamente apos o primeiro comando):
-```python
-import pandas as pd
-import streamlit as st
-```
+The Groq API key is entered in the sidebar at runtime.
 
-Feito isso, digite CTRL+D para sair do comando e execute o sistema de fato:
-```bash
-# Executar sistema
-streamlit run agente_fiscal.py
-```
+## Scope and limitations
 
-Uma janela do navegador deve abrir, e nela pode-se entrar com a chave grok obtida em [console.groq.com](https://console.groq.com) e enviar os arquivos e realizar as analises.
+- Inference runs through the **Groq API**, so invoice contents leave the machine. Fine for the public course dataset, not suitable for a client's real fiscal data without moving to local inference first.
+- Course scope: one analysis module, no test suite, no auth, no multi-user state.
+- NF-e **CSV exports only**. No XML parsing and no SEFAZ integration.
+- Fiscal code semantics (CFOP, NCM) come from the model, not from a lookup table, so treat any interpretation of a code as a starting point rather than an answer.
 
-## 📋 Requisitos do Sistema
+A sample generated report is included as `Relatorio_Analise_Fiscal_IA.pdf`.
 
-### Obrigatórios
-- **Python 3.8+** (recomendado 3.10+)
-- **Chave API Groq** (gratuita em [console.groq.com](https://console.groq.com))
-- **4GB RAM** mínimo (8GB recomendado)
-- **Conexão com internet** para IA
+## Licence
 
-### Sistema Operacional
-- ✅ Windows 10/11
-- ✅ macOS 10.14+
-- ✅ Ubuntu 18.04+
-- ✅ Outras distribuições Linux
-
-## 🔧 Configuração
-
-### 1. Obter Chave API Groq
-1. Acesse [console.groq.com](https://console.groq.com)
-2. Crie uma conta gratuita
-3. Gere sua API Key
-4. Mantenha a chave segura
-
-### 2. Configurar Variáveis de Ambiente (Opcional)
-Crie um arquivo `.env`:
-```env
-GROQ_API_KEY=sua_chave_api_aqui
-STREAMLIT_SERVER_PORT=8501
-```
-
-## 🎯 Como Usar
-
-### 1. Iniciar o Sistema
-```bash
-streamlit run agente_fiscal.py
-```
-
-### 2. Acessar Interface
-- Abra seu navegador em: http://localhost:8501
-- Configure sua API Key na barra lateral
-- Carregue seus dados fiscais
-
-### 3. Carregar Dados
-- **CSV individual**: Notas fiscais, documentos fiscais
-- **Arquivo ZIP**: Múltiplos CSVs organizados
-- **Dados exemplo**: Para teste inicial
-
-### 4. Fazer Análises
-- Use perguntas sugeridas ou
-- Digite consultas personalizadas em português
-- Aguarde a análise da IA
-
-## 📊 Exemplos de Consultas
-
-```
-✅ "Qual o valor total das notas fiscais?"
-✅ "Quais os principais clientes por volume?"
-✅ "Quantos CFOPs diferentes temos?"
-✅ "Identifique inconsistências nos documentos"
-✅ "Calcule o ICMS total recolhido"
-✅ "Análise de vendas por região"
-```
-
-## 🗂️ Estrutura de Dados Suportada
-
-### Colunas Recomendadas
-- `numero_nf`: Número da nota fiscal
-- `cfop`: Código Fiscal de Operações
-- `valor_total`: Valor total do documento
-- `valor_icms`: Valor do ICMS
-- `produto`: Descrição do produto
-- `cliente`: Nome do cliente
-- `uf`: Unidade federativa
-- `data_emissao`: Data de emissão
-- `ncm`: Nomenclatura Comum do Mercosul
-
-### Formato de Arquivo
-```csv
-numero_nf,cfop,valor_total,valor_icms,produto,cliente,uf,data_emissao
-000001,5102,1500.00,270.00,Mouse Óptico,Tech Solutions,SP,2024-01-15
-000002,5102,2300.50,414.09,Teclado,Informática Brasil,RJ,2024-01-16
-```
-
-## 🔐 Segurança e Privacidade
-
-- ✅ **Dados locais**: Processamento na sua máquina
-- ✅ **API segura**: Comunicação criptografada com Groq
-- ✅ **Sem armazenamento**: Dados não são salvos remotamente
-- ✅ **Código aberto**: Transparência total
-
-## 🐛 Solução de Problemas
-
-### Erro de API Key
-- Verifique se a chave está correta
-- Confirme se há créditos na conta Groq
-- Teste a chave em [console.groq.com](https://console.groq.com)
-
-### Performance Lenta
-- Use modelos menores (llama3-8b-8192)
-- Reduza o tamanho dos dados
-- Feche outras aplicações
-
-## 📞 Suporte
-
-### Documentação
-- [Wiki do Projeto](https://github.com/usuario/analise-fiscal-ia/wiki)
-- [FAQ](https://github.com/usuario/analise-fiscal-ia/wiki/FAQ)
-
-### Comunidade
-- [Issues no GitHub](https://github.com/usuario/analise-fiscal-ia/issues)
-- [Discussões](https://github.com/usuario/analise-fiscal-ia/discussions)
-
-## 📜 Licença
-
-Este projeto está licenciado sob a Licença MIT - veja o arquivo [LICENSE](LICENSE) para detalhes.
-
-## 🤝 Contribuindo
-
-Contribuições são bem-vindas! Por favor:
-
-1. Fork o projeto
-2. Crie uma branch para sua feature
-3. Commit suas mudanças
-4. Push para a branch
-5. Abra um Pull Request
-
-## 🎖️ Créditos
-
-- **Streamlit**: Framework web
-- **LangChain**: Orquestração de IA
-- **Groq**: Inferência rápida de LLMs
-- **LLaMA**: Modelo de linguagem
-- **Pandas**: Manipulação de dados
-
----
-
-**Sistema de Análise Fiscal IA** - Automatizando a análise fiscal brasileira com inteligência artificial
-
-*Desenvolvido com ❤️ para contadores e gestores brasileiros*
+MIT. See [LICENSE](LICENSE).
